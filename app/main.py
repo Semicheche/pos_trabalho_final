@@ -379,13 +379,12 @@ def About():
         df2 = None
         if hasDataFrame(mun) and hasDataFrame(df1) :
             solara.Success("Dados de Municipios e Votacao")
-            with solara.ColumnsResponsive(2, large=6):
+            with solara.ColumnsResponsive(6, large=6):
                 solara.SelectMultiple("Municipio", all_values=list(mun["name"]), values=State.municipios)
-                solara.Button("Limpar Selecao", on_click=reset_select,)
+                solara.Button("Limpar Selecao", on_click=reset_select)
                 if len(State.municipios.value) > 0:
                     if isinstance(State.municipios.value, list):
                         df2 = df1[df1['NM_MUNICIPIO'].isin([ mun.upper() for mun in State.municipios.value])]
-                        print(df2)
                     # solara.DataFrame(df2)
                         with solara.ColumnsResponsive(8, large=8):
                             if hasDataFrame(df2):
