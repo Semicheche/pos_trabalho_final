@@ -14,7 +14,7 @@ from ipywidgets import HTML
 
 #maps
 import ipyleaflet
-from ipyleaflet import Map
+from ipyleaflet import Map, LayersControl, Marker, Popup, Heatmap
 # # from . import SharedComponent
 
 # #github_url = solara.util.github_url(__file__)
@@ -78,21 +78,26 @@ class State:
 
     msg_load_base = solara.reactive(cast(Optional[str], None))
     msg = solara.reactive(cast(Optional[str], None))
-    
+
     colunas = solara.reactive(cast(Optional[str], None))
-    
+
     municipio = solara.reactive(cast(Optional[str], None))
     nome_municipio = solara.reactive(cast(Optional[str], None))
     id_municipio = solara.reactive(cast(Optional[str], None))
     info_municipio = solara.reactive(cast(Optional[str], None))
     candidato = solara.reactive(cast(Optional[str], None))
     result = solara.reactive(cast(Optional[str], None))
-    
+
     get_positions = solara.reactive(cast(Optional[bool], False))
     check = solara.reactive(False)
 
     municipios = solara.reactive(cast(Optional[str], []))
+
+    cargo_candidato = solara.reactive(cast(Optional[str], None))
+    candidato_por_municipio = solara.reactive(cast(Optional[str], None))
     
+    IBGE_info = solara.reactive(cast({}, {}))
+
     @staticmethod
     def set_col(df):
         return solara.reactive([list(df.columns)[0]])
@@ -134,7 +139,6 @@ class DataSet():
                     print(f"Carregando o dados {k}" )
                     df1 = gpd.read_file(v['url'])
                     df1['name'] = [str(name).upper() for name in df1['name']]
-                    print(df1.head(4))
                 # if k == "uf":
                 #     print(f"Carregando o dados {k}" )
                 #     df2 = gpd.read_file(v['url'])
@@ -144,9 +148,6 @@ class DataSet():
         print(f"Mescla o dados Municipios e eleicoes" )
         gdf = df1.merge(df, left_on='name', right_on='NM_MUNICIPIO')
        # gdf = gdf.merge(df2, left_on='SG_UF', right_on='UF_05')
-
-        print(gdf.columns)
-
 
         return gdf
 
@@ -162,12 +163,22 @@ class DataSet():
 
 def load_municipio():
     municipio_data = gpd.read_file("/Users/semicheche/trabalho_final_pos/municipio.json")
+    
+    get_centroids(municipio_data)
 
+    municipio_data['IBGE_INFO'] = State.IBGE_info.value.values()
     State.df_municipios.value = municipio_data
 
 def get_ibge_info():
     info_municipio = requests.get(f"https://servicodados.ibge.gov.br/api/v3/malhas/municipios/{State.id_municipio}/metadados")
     State.info_municipio.value = info_municipio.json()
+
+def get_ibge_by_id(id_municipio):
+
+    if id_municipio not in State.IBGE_info.value.keys():
+        print(id_municipio)
+        info_municipio = requests.get(f"https://servicodados.ibge.gov.br/api/v3/malhas/municipios/{id_municipio}/metadados")
+        State.IBGE_info.value.setdefault(id_municipio,  info_municipio.json()[0])
 
 def line():
         return solara.Markdown("___")
@@ -322,6 +333,11 @@ def Home():
     else:
         solara.Info("Carregue a base de dados")
 
+def get_centroids(dataframe=None,):
+    for data in dataframe['id']:
+        get_ibge_by_id(data)
+
+
 def hasDataFrame(datafrfame):
     return datafrfame.__class__ != None.__class__
 
@@ -365,12 +381,58 @@ def FilterData():
     State.df.describe()
 
 @solara.component
-def GeoData():
+def Candidato():
     solara.Markdown("MUNICIPIO")
-    df1 = DataSet.load_municipio()
-    if df1 is not None:
-        solara.DataFrame(df1)
+    mun = State.df_municipios.value
+    df1 = State.df.value
+    df3 = None
+    if hasDataFrame(mun) and hasDataFrame(df1):
+        mun['municipio'] = [ m.upper() for m in mun['name']]
+        df2 = mun.merge(df1, right_on='NM_MUNICIPIO', left_on='municipio')
 
+        with solara.ColumnsResponsive(2, large=6):
+            solara.Select('Cargo', values=list(df2['DS_CARGO'].unique()), value=State.cargo_candidato)
+            if State.cargo_candidato.value:
+                solara.Select('Candidadato', values=list(df2[df2['DS_CARGO'] == State.cargo_candidato.value]['NM_VOTAVEL'].unique()), value=State.candidato_por_municipio)
+
+            df3 = df2[(df2['DS_CARGO'] == State.cargo_candidato.value) & (df2['NM_VOTAVEL'] == State.candidato_por_municipio.value)]
+
+            solara.Markdown(f""" # {State.candidato_por_municipio.value}""")
+            solara.Markdown(f""" ## TOTAL DE VOTOS {df3['QT_VOTOS'].sum()}""")
+            solara.Markdown(f""" ## QUANTIDADE DE MUNICIPIOS QUE VOTOU {len(df3['NM_MUNICIPIO'].unique())} de {len(df1['NM_MUNICIPIO'].unique())}""")
+
+        with solara.ColumnsResponsive(2, large=6):
+            with solara.Column():
+                if hasDataFrame(df3):
+                    url = ipyleaflet.basemaps.OpenStreetMap.Mapnik["url"]
+                    layers_candidato = [ipyleaflet.TileLayer.element(url=url)]
+                    df4 = mun
+                    if hasDataFrame(df4):
+                        df4 = df4[df4['municipio'].isin(df3['NM_MUNICIPIO'].unique())]
+                        geo_data = ipyleaflet.GeoData(geo_dataframe = df4,
+                                style={'color': 'black', 'fillColor': '#3366cc', 'opacity':0.1, 'weight':1.9, 'dashArray':'2', 'fillOpacity':0.2},
+                                hover_style={'fillColor': 'red' , 'fillOpacity': 0.2},
+                                name = 'nome')
+                        layers_candidato.append(geo_data)
+                      
+                        map = Map.element(
+                                        center=(-24.2393431,-50.88778),
+                                        zoom=7,
+                                        layers=layers_candidato)
+            with solara.Column():
+   
+                locations = [ (v['centroide']['latitude'], v['centroide']['longitude']) for v in df3['IBGE_INFO']]
+                url = ipyleaflet.basemaps.OpenStreetMap.Mapnik["url"]
+                layers_mapa_calor = [ipyleaflet.TileLayer.element(url=url)]
+                heatmap = Heatmap(
+                    locations=locations,
+                    radius=25
+                )
+                layers_mapa_calor.append(heatmap)
+                map = Map.element(
+                                center=(-24.2393431,-50.88778),
+                                zoom=7,
+                                layers=layers_mapa_calor)
 @solara.component
 def About():
     with solara.Card("", margin=0, elevation=0):
@@ -385,10 +447,9 @@ def About():
                 if len(State.municipios.value) > 0:
                     if isinstance(State.municipios.value, list):
                         df2 = df1[df1['NM_MUNICIPIO'].isin([ mun.upper() for mun in State.municipios.value])]
-                    # solara.DataFrame(df2)
+
                         with solara.ColumnsResponsive(8, large=8):
                             if hasDataFrame(df2):
-                                print(df2['QT_VOTOS'].sum())
                                 solara.Markdown(f""" ## TOTAL DE VOTOS:
                                                     {df2['QT_VOTOS'].sum()} """)
             if len(State.municipios.value) > 0:
@@ -408,76 +469,9 @@ def About():
                         if State.cargo.value:
                             df3 = df2[df2['DS_CARGO'] == State.cargo.value]
                             solara_px.histogram(df3, y=df3['NM_VOTAVEL'], x=df3['QT_VOTOS'],height=900 )
-                        # with solara.Column():
-                        #         solara.Markdown("AQUI")
-    #             mun['NM_MUN'] = [ n.upper() for n in mun['name']]
-    #            
 
-    #             if State.municipios.value:
-    #                 State.id_municipio = mun[mun['name'] == State.nome_municipio.value[0]]['id'].to_numpy()[0]
-    #                 get_ibge_info()
-    #                 solara.Markdown(f"""
-    #                                 ### {State.info_municipio.value[0]['nivel-geografico'].capitalize()} {State.nome_municipio.value}
-    #                                 #### {State.info_municipio.value[0]['area']['dimensao']} {State.info_municipio.value[0]['area']['unidade']['id']}
-    #                                 """)
-    #     else:
-    #         solara.Info("Carregue a base de dados")
-    # with solara.ColumnsResponsive(6, large=4):
-    #     url = ipyleaflet.basemaps.OpenStreetMap.Mapnik["url"]
-    #     layers = [ipyleaflet.TileLayer.element(url=url)]
-    #     with solara.Card(f"Mapa do municipio de {State.nome_municipio.value}:", margin=0, elevation=0):
-    #         ...
-            # if hasDataFrame(mun) and isinstance(State.municipios.value, list):
-        #         for municipio in State.municipios.value:
-        #             geo_data_BR = ipyleaflet.GeoData(geo_dataframe = mun[mun['id'] == municipio],
-        #                             style={'color': 'black', 'fillColor': '#3366cc', 'opacity':0.05, 'weight':1.9, 'dashArray':'2', 'fillOpacity':0.6},
-        #                             hover_style={'fillColor': 'red' , 'fillOpacity': 0.2},
-        #                             name = 'Estados')
-        #             layers.append(geo_data_BR)
-
-        #         if State.info_municipio.value:
-        #             center = State.info_municipio.value[0]['centroide']
-
-        #             map = ipyleaflet.Map.element(
-        #                 center=(center["latitude"], center['longitude']),
-        #                 zoom=9,
-        #                 close_popup_on_click=False,
-        #                 layers=layers
-        #             )
-        # with solara.Card(f"Dados do municipio de {State.nome_municipio.value}:", margin=0, elevation=0):
-        #     df = State.df.value
-        #     if hasDataFrame(df) and  hasDataFrame(mun) and isinstance(State.nome_municipio.value, str):
-        #         ...
-                # total_votos = df[df['NM_MUNICIPIO'] == State.nome_municipio.value.upper()]['QT_VOTOS'].sum()
-                # total_votos_cargo = df[df['NM_MUNICIPIO'] == State.nome_municipio.value.upper()].groupby('DS_CARGO')[['QT_VOTOS']].sum()
-                
-                # for i, cargo in enumerate(list(total_votos_cargo.index)):
-                #     solara.Markdown(f"""### {cargo}: {total_votos_cargo.values[i][0]} """)
-                # solara.Markdown("___")
-                # solara.Markdown(f"""##TOTAL VOTOS: **{total_votos}** """)
-                # print(total_votos_cargo.index)
-                # ps = df[df['NM_MUNICIPIO'] == State.nome_municipio.value.upper()].groupby(['NR_SECAO', 'NR_ZONA', 'NM_LOCAL_VOTACAO'])['QT_VOTOS'].sum()
-                
-                # nr_seccao = []
-                # nr_zona = []
-                # nm_local = []
-                # for s in ps.index:
-                #     nr_seccao.append(s[0])
-                #     nr_zona.append(s[1])
-                #     nm_local.append(s[2])
-                # df_1 = pd.DataFrame(ps.values, columns=['QT_VOTOS'])
-                # df_2 = pd.DataFrame(nr_seccao, columns=['NR_SECAO'])
-                # df_3 = pd.DataFrame(nr_zona, columns=['NR_ZONA'])
-                # df_4 = pd.DataFrame(nm_local, columns=['NM_LOCAL_VOTACAO'])
-                
-                # df_local = pd.merge(df_4, df_3, left_index=True, right_index=True)
-                # df_local = pd.merge(df_local, df_2, left_index=True, right_index=True)
-                # df_local = pd.merge(df_local, df_1, left_index=True, right_index=True)
-                # solara.DataTable(df_local)
-
-                #solara_px.bar(total_votos_candidato, y=total_votos_candidato.values)
 routes = [
     solara.Route(path="/", component=Home, label="DADOS ELEITORAIS PR 2022"),
     solara.Route(path="MUNICIPIOS", component=About, label="MUNICIPIOS"),
-    solara.Route(path="CANDIDATOS", component=About, label="CANDIDATOS"),
+    solara.Route(path="CANDIDATOS", component=Candidato, label="CANDIDATOS"),
 ]
