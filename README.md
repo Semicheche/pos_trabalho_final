@@ -1,6 +1,6 @@
 # pos_trabalho_final
 
-### Trabalhho de eaanalise de dados baseano nas Eleicoes do Ano de 2022
+### Trabalho de análise de dados baseado nas Eleiçõees do Ano de 2022
  Histórico totalização Presidente - Votação nominal/partido por município e zona - Detalhe da apuração por município e zona/seção eleitoral - Votação por seção eleitoral
 
 [**PR - Votação por seção eleitoral - 2022**](https://dadosabertos.tse.jus.br/dataset/resultados-2022/resource/ac7bb6a5-68e4-4852-a690-dd2b526c92ee)
