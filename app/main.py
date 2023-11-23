@@ -163,7 +163,7 @@ class DataSet():
 
 def load_municipio():
     municipio_data = gpd.read_file("/Users/semicheche/trabalho_final_pos/municipio.json")
-    
+
     get_centroids(municipio_data)
 
     municipio_data['IBGE_INFO'] = State.IBGE_info.value.values()
@@ -176,7 +176,6 @@ def get_ibge_info():
 def get_ibge_by_id(id_municipio):
 
     if id_municipio not in State.IBGE_info.value.keys():
-        print(id_municipio)
         info_municipio = requests.get(f"https://servicodados.ibge.gov.br/api/v3/malhas/municipios/{id_municipio}/metadados")
         State.IBGE_info.value.setdefault(id_municipio,  info_municipio.json()[0])
 
@@ -414,13 +413,13 @@ def Candidato():
                                 hover_style={'fillColor': 'red' , 'fillOpacity': 0.2},
                                 name = 'nome')
                         layers_candidato.append(geo_data)
-                      
+
                         map = Map.element(
                                         center=(-24.2393431,-50.88778),
                                         zoom=7,
                                         layers=layers_candidato)
             with solara.Column():
-   
+
                 locations = [ (v['centroide']['latitude'], v['centroide']['longitude']) for v in df3['IBGE_INFO']]
                 url = ipyleaflet.basemaps.OpenStreetMap.Mapnik["url"]
                 layers_mapa_calor = [ipyleaflet.TileLayer.element(url=url)]
@@ -433,12 +432,20 @@ def Candidato():
                                 center=(-24.2393431,-50.88778),
                                 zoom=7,
                                 layers=layers_mapa_calor)
+        
+        with solara.Column():
+            if hasDataFrame(df3):
+               ...
+                # print(len(df3.groupby(['NM_MUNICIPIO'])['QT_VOTOS'].sum()))
+                # print(len(df3[df3['NM_MUNICIPIO'] == df3['NM_MUNICIPIO'].unique()]))
+                #solara_px.histogram(x=df3.groupby(['NM_MUNICIPIO'])['QT_VOTOS'].sum().sort_values(), y=df3['NM_MUNICIPIO'].unique())
 @solara.component
 def About():
     with solara.Card("", margin=0, elevation=0):
         mun = State.df_municipios.value
         df1 = State.df.value
         df2 = None
+
         if hasDataFrame(mun) and hasDataFrame(df1) :
             solara.Success("Dados de Municipios e Votacao")
             with solara.ColumnsResponsive(6, large=6):
